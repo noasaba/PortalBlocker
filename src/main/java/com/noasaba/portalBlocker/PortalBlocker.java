@@ -25,13 +25,13 @@ import java.util.*;
 
 public class PortalBlocker extends JavaPlugin implements Listener, TabCompleter {
 
-    // 言語ファイル読み込み用マップ
+    // 多言語対応: メッセージを保管するMap
     private final Map<String, String> messages = new HashMap<>();
 
-    // config.yml の基本設定
+    // config.yml の設定
     private String language;            // "en" or "ja"
-    private int globalBlockDistance;    // オーバーワールド用
-    private int globalNetherDistance;   // ネザー用
+    private int globalBlockDistance;    // Overworld用
+    private int globalNetherDistance;   // Nether用
     private static final int DEFAULT_NETHER_MULTIPLIER = 8;
     private static final int DEFAULT_NETHER_OFFSET = 2;
 
@@ -41,23 +41,32 @@ public class PortalBlocker extends JavaPlugin implements Listener, TabCompleter 
 
     @Override
     public void onEnable() {
-        // config.yml がなければ生成
+        // 1) デフォルトの config.yml を生成 (なければ)
         saveDefaultConfig();
-        loadConfigAndMessages();
+        // 2) config.yml & langの読み込み
+        loadConfigAndLanguage();
 
-        // world.yml の用意
+        // 3) world.yml がなければリソースからコピー → ロード
         setupWorldConfig();
+        // 4) 足りないワールドを追記 (block-distance: default など)
         addMissingWorlds();
+        // 5) world.yml を保存 (この時点でコメントは消える可能性あり)
         saveWorldConfig();
 
-        // イベント登録
+        // 6) イベント登録
         getServer().getPluginManager().registerEvents(this, this);
 
-        // コマンド登録
+        // 7) コマンド登録
         if (getCommand("portalblocker") != null) {
             getCommand("portalblocker").setExecutor(this);
             getCommand("portalblocker").setTabCompleter(this);
         }
+
+        // 8) 起動メッセージ (plugin.yml の version を自動取得)
+        String version = getDescription().getVersion();
+        getLogger().info("== === ==");
+        getLogger().info("PortalBlocker v" + version + " - Developed by NOASABA (by nanosize)");
+        getLogger().info("== === ==");
     }
 
     @Override
@@ -65,46 +74,49 @@ public class PortalBlocker extends JavaPlugin implements Listener, TabCompleter 
         saveWorldConfig();
     }
 
-    /**
-     * config.yml を読み込み、langファイルも読み込む
-     */
-    private void loadConfigAndMessages() {
+    // ---------------------------------------------
+    //  config.yml & lang 読み込み
+    // ---------------------------------------------
+    private void loadConfigAndLanguage() {
         reloadConfig();
         FileConfiguration cfg = getConfig();
 
-        // 言語設定 ("en" / "ja" 以外なら en にフォールバック)
-        this.language = cfg.getString("language", "en");
+        // 言語設定
+        language = cfg.getString("language", "en");
         if (!language.equalsIgnoreCase("en") && !language.equalsIgnoreCase("ja")) {
             language = "en";
         }
 
-        // グローバル距離設定
+        // block-distance (Overworld)
         globalBlockDistance = cfg.getInt("block-distance", 100);
 
+        // nether-block-distance
         if (cfg.isInt("nether-block-distance")) {
+            // 数値が書いてあればその値を適用
             globalNetherDistance = cfg.getInt("nether-block-distance");
         } else {
-            // "default" 場合 -> block-distance / 8 + 2
+            // "default" or 他の場合 → block-distance / 8 + 2
             globalNetherDistance = (globalBlockDistance / DEFAULT_NETHER_MULTIPLIER) + DEFAULT_NETHER_OFFSET;
         }
 
-        // 言語ファイル読み込み
+        // 言語ファイルを読み込み
         loadLanguageFile(language);
     }
 
     /**
-     * lang/<language>.yml を読み込み
+     * lang/en.yml / lang/ja.yml を読み込んで messages に格納
      */
-    private void loadLanguageFile(String langCode) {
+    private void loadLanguageFile(String lang) {
         messages.clear();
-        String path = "lang/" + langCode + ".yml";
-        InputStream in = getResource(path);
+        String resourcePath = "lang/" + lang + ".yml";
+
+        InputStream in = getResource(resourcePath);
         if (in == null) {
-            // ファイルが見つからない場合は en.yml にフォールバック
-            getLogger().warning("Language file not found: " + path + ", fallback to en.yml");
+            // ファイルが見つからない場合は英語にフォールバック
+            getLogger().warning("Language file not found: " + resourcePath + " , fallback to en.yml");
             in = getResource("lang/en.yml");
             if (in == null) {
-                getLogger().severe("lang/en.yml is also missing! Using minimal defaults.");
+                getLogger().severe("lang/en.yml is missing! Using minimal defaults.");
                 messages.put("NO_PERMISSION", "You do not have permission.");
                 return;
             }
@@ -120,13 +132,13 @@ public class PortalBlocker extends JavaPlugin implements Listener, TabCompleter 
                 }
             }
         } catch (Exception e) {
-            getLogger().severe("Failed to load language file: " + path);
+            getLogger().severe("Failed to load language file: " + resourcePath);
             e.printStackTrace();
         }
     }
 
     /**
-     * メッセージを取得
+     * メッセージ取得 (String.format対応)
      */
     private String msg(String key, Object... args) {
         String text = messages.getOrDefault(key, key);
@@ -136,14 +148,13 @@ public class PortalBlocker extends JavaPlugin implements Listener, TabCompleter 
         return text;
     }
 
-    // ============================
-    // world.yml 関連
-    // ============================
+    // ---------------------------------------------
+    // world.yml の読み込み・追記・保存
+    // ---------------------------------------------
     private void setupWorldConfig() {
         worldConfigFile = new File(getDataFolder(), "world.yml");
-
-        // 初回導入時に world.yml がない場合、リソースをコピー
         if (!worldConfigFile.exists()) {
+            // 初回導入時のみコメント付きファイルをコピー
             saveResource("world.yml", false);
         }
         worldConfig = YamlConfiguration.loadConfiguration(worldConfigFile);
@@ -164,24 +175,29 @@ public class PortalBlocker extends JavaPlugin implements Listener, TabCompleter 
     }
 
     /**
-     * world.yml に存在しないワールドを自動追加
+     * 未登録のワールドを "AUTO" / "block-distance: default" / "nether-block-distance: default" で追加
      */
     private void addMissingWorlds() {
         for (World w : Bukkit.getWorlds()) {
             String basePath = "worlds." + w.getName();
             if (!worldConfig.isConfigurationSection(basePath)) {
+                worldConfig.createSection(basePath);
+                // デフォルト記述
                 worldConfig.set(basePath + ".type", "AUTO");
+                worldConfig.set(basePath + ".block-distance", "default");
+                worldConfig.set(basePath + ".nether-block-distance", "default");
             }
         }
     }
 
-    // ============================
-    // イベントハンドラー
-    // ============================
+    // ---------------------------------------------
+    // イベント (PortalCreate / PlayerPortal)
+    // エンドワールドは処理しない
+    // ---------------------------------------------
     @EventHandler
     public void onPortalCreate(PortalCreateEvent event) {
         World world = event.getWorld();
-        // ① エンドワールドなら何もしない
+        // エンドワールドはスキップ
         if (world.getEnvironment() == Environment.THE_END) {
             return;
         }
@@ -193,7 +209,7 @@ public class PortalBlocker extends JavaPlugin implements Listener, TabCompleter 
             Location portalLoc = block.getLocation();
             if (isWithinRestricted(spawnLoc, portalLoc, maxDist)) {
                 event.setCancelled(true);
-                // 周囲にメッセージ
+                // 周囲のプレイヤーに通知
                 for (Player p : Bukkit.getOnlinePlayers()) {
                     if (p.getWorld().equals(world) && isWithinRestricted(p.getLocation(), portalLoc, 10)) {
                         p.sendMessage(msg("PORTAL_CREATE_DENY"));
@@ -209,7 +225,7 @@ public class PortalBlocker extends JavaPlugin implements Listener, TabCompleter 
     public void onPlayerPortal(PlayerPortalEvent event) {
         Player player = event.getPlayer();
         World world = player.getWorld();
-        // ② エンドワールドなら何もしない
+        // エンドワールドはスキップ
         if (world.getEnvironment() == Environment.THE_END) {
             return;
         }
@@ -226,51 +242,71 @@ public class PortalBlocker extends JavaPlugin implements Listener, TabCompleter 
     }
 
     /**
-     * スポーン地点からの四角形範囲内か確認
+     * スポーン地点から四角形範囲 (±maxDist) をチェック
      */
-    private boolean isWithinRestricted(Location spawn, Location check, int dist) {
+    private boolean isWithinRestricted(Location spawn, Location check, int maxDist) {
         double dx = Math.abs(spawn.getX() - check.getX());
         double dz = Math.abs(spawn.getZ() - check.getZ());
-        return (dx <= dist && dz <= dist);
+        return (dx <= maxDist && dz <= maxDist);
     }
 
     /**
-     * ワールドタイプを参照して距離を決定
+     * ワールドごとの距離を決定 (type, block-distance, nether-block-distance)
      */
-    private int getEffectiveDistance(World world) {
-        String base = "worlds." + world.getName();
-        String type = worldConfig.getString(base + ".type", "AUTO").toUpperCase();
+    private int getEffectiveDistance(World w) {
+        String path = "worlds." + w.getName();
+        String type = worldConfig.getString(path + ".type", "AUTO").toUpperCase();
 
-        int localBlock = worldConfig.getInt(base + ".block-distance", globalBlockDistance);
-        int localNether = worldConfig.getInt(base + ".nether-block-distance", globalNetherDistance);
+        // block-distance と nether-block-distance は "default" or 数値
+        String bdistStr = worldConfig.getString(path + ".block-distance", "default");
+        String ndistStr = worldConfig.getString(path + ".nether-block-distance", "default");
 
-        // AUTO or OVERWORLD or NETHER -> 距離を返す
+        // 実際の値に変換
+        int localBlockDist = parseOrDefault(bdistStr, globalBlockDistance);
+        int localNetherDist = parseOrDefault(ndistStr, globalNetherDistance);
+
         if (type.equals("OVERWORLD")) {
-            return localBlock;
+            return localBlockDist;
         } else if (type.equals("NETHER")) {
-            return localNether;
+            return localNetherDist;
         } else if (type.equals("THE_END")) {
-            // world.yml 上で THE_END 指定された場合 → 実際には何もしない設計だが
-            // ここでは localBlock を返す等、好きに設定可
-            return localBlock;
+            // world.yml で THE_END と書かれていても実際にはイベントをスキップ
+            // 一応返す値を決める (ここでは localBlockDist)
+            return localBlockDist;
         } else {
-            // AUTO
-            if (world.getEnvironment() == Environment.NETHER) {
-                return localNether;
+            // AUTO -> Bukkit の Environment に従う
+            if (w.getEnvironment() == Environment.NETHER) {
+                return localNetherDist;
             } else {
-                return localBlock;
+                return localBlockDist;
             }
         }
     }
 
-    // ============================
-    // コマンド
-    // ============================
+    /**
+     * "default" と書かれていれば defaultVal を返し、数値ならパースして返す
+     */
+    private int parseOrDefault(String str, int defaultVal) {
+        if ("default".equalsIgnoreCase(str)) {
+            return defaultVal;
+        }
+        // それ以外は数値とみなす
+        try {
+            return Integer.parseInt(str);
+        } catch (NumberFormatException e) {
+            return defaultVal;
+        }
+    }
+
+    // ---------------------------------------------
+    // コマンド実装 (/portalblocker)
+    // ---------------------------------------------
     @Override
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
         if (!cmd.getName().equalsIgnoreCase("portalblocker")) {
             return false;
         }
+
         if (args.length == 0) {
             sendHelp(sender);
             return true;
@@ -282,12 +318,15 @@ public class PortalBlocker extends JavaPlugin implements Listener, TabCompleter 
                     sender.sendMessage(msg("NO_PERMISSION"));
                     return true;
                 }
-                // config.yml＆lang再読込
-                loadConfigAndMessages();
+                // config.yml & lang 再読込
+                loadConfigAndLanguage();
                 // world.yml 再読込
                 reloadWorldConfig();
+                // 未登録ワールドを "default" 付きで追加
                 addMissingWorlds();
+                // 保存
                 saveWorldConfig();
+                // メッセージ
                 sender.sendMessage(msg("RELOAD_DONE"));
                 return true;
 
@@ -296,6 +335,7 @@ public class PortalBlocker extends JavaPlugin implements Listener, TabCompleter 
                     sender.sendMessage(msg("NO_PERMISSION"));
                     return true;
                 }
+                // world.yml に未登録ワールドを追加
                 addMissingWorlds();
                 saveWorldConfig();
                 sender.sendMessage("§aAll missing worlds have been added to world.yml");
