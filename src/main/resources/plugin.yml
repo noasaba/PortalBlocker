@@ -2,3 +2,12 @@ name: PortalBlocker
 version: '1.0-SNAPSHOT'
 main: com.noasaba.portalBlocker.PortalBlocker
 api-version: '1.21'
+commands:
+  portalBlocker:
+    description: PortalBlockerの管理コマンド
+    usage: /portalblocker reload
+    permission: portalblocker.reload
+permissions:
+  portalBlocker.reload:
+    description: PortalBlockerの設定をリロードできる
+    default: op

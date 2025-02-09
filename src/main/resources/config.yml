@@ -1,1 +1,2 @@
-block-distance: 100
+block-distance: 200
+nether-block-distance: default
