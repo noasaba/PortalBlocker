@@ -25,15 +25,18 @@ import java.util.*;
 
 public class PortalBlocker extends JavaPlugin implements Listener, TabCompleter {
 
-    // 多言語対応: メッセージを保管するMap
+    // 多言語メッセージ保管用
     private final Map<String, String> messages = new HashMap<>();
 
-    // config.yml の設定
-    private String language;            // "en" or "ja"
-    private int globalBlockDistance;    // Overworld用
-    private int globalNetherDistance;   // Nether用
+    // config.yml 由来の設定
+    private String language;                       // "en" or "ja"
+    private int globalBlockDistance;               // Overworld距離
+    private int globalNetherDistance;              // Nether距離
     private static final int DEFAULT_NETHER_MULTIPLIER = 8;
     private static final int DEFAULT_NETHER_OFFSET = 2;
+
+    // 「制限ゾーン内でのポータル使用」を許可するか
+    private boolean allowPortalTravelInRestricted;
 
     // world.yml
     private File worldConfigFile;
@@ -41,28 +44,27 @@ public class PortalBlocker extends JavaPlugin implements Listener, TabCompleter 
 
     @Override
     public void onEnable() {
-        // 1) デフォルトの config.yml を生成 (なければ)
+        // config.yml がなければ生成
         saveDefaultConfig();
-        // 2) config.yml & langの読み込み
+        // config.yml + lang読み込み
         loadConfigAndLanguage();
 
-        // 3) world.yml がなければリソースからコピー → ロード
+        // world.yml の用意
         setupWorldConfig();
-        // 4) 足りないワールドを追記 (block-distance: default など)
+        // Bukkitが認識しているワールドのうち、未登録のワールドを追加
         addMissingWorlds();
-        // 5) world.yml を保存 (この時点でコメントは消える可能性あり)
         saveWorldConfig();
 
-        // 6) イベント登録
+        // イベント登録
         getServer().getPluginManager().registerEvents(this, this);
 
-        // 7) コマンド登録
+        // コマンド登録
         if (getCommand("portalblocker") != null) {
             getCommand("portalblocker").setExecutor(this);
             getCommand("portalblocker").setTabCompleter(this);
         }
 
-        // 8) 起動メッセージ (plugin.yml の version を自動取得)
+        // plugin.yml の version を取得して起動メッセージを出す
         String version = getDescription().getVersion();
         getLogger().info("== === ==");
         getLogger().info("PortalBlocker v" + version + " - Developed by NOASABA (by nanosize)");
@@ -74,46 +76,45 @@ public class PortalBlocker extends JavaPlugin implements Listener, TabCompleter 
         saveWorldConfig();
     }
 
-    // ---------------------------------------------
-    //  config.yml & lang 読み込み
-    // ---------------------------------------------
+    // --------------------------------------------------
+    // config.yml & langファイル 読み込み
+    // --------------------------------------------------
     private void loadConfigAndLanguage() {
         reloadConfig();
         FileConfiguration cfg = getConfig();
 
         // 言語設定
-        language = cfg.getString("language", "en");
+        this.language = cfg.getString("language", "en");
         if (!language.equalsIgnoreCase("en") && !language.equalsIgnoreCase("ja")) {
             language = "en";
         }
 
-        // block-distance (Overworld)
+        // Overworld の distance
         globalBlockDistance = cfg.getInt("block-distance", 100);
 
-        // nether-block-distance
+        // Nether の distance (int or default)
         if (cfg.isInt("nether-block-distance")) {
-            // 数値が書いてあればその値を適用
             globalNetherDistance = cfg.getInt("nether-block-distance");
         } else {
-            // "default" or 他の場合 → block-distance / 8 + 2
             globalNetherDistance = (globalBlockDistance / DEFAULT_NETHER_MULTIPLIER) + DEFAULT_NETHER_OFFSET;
         }
 
-        // 言語ファイルを読み込み
+        // 範囲内でポータル使用を許可するか
+        allowPortalTravelInRestricted = cfg.getBoolean("allow-portal-travel-in-restricted-zone", false);
+
+        // langファイル読み込み
         loadLanguageFile(language);
     }
 
     /**
-     * lang/en.yml / lang/ja.yml を読み込んで messages に格納
+     * lang/ja.yml, lang/en.yml を読み込み、 messages に格納
      */
     private void loadLanguageFile(String lang) {
         messages.clear();
-        String resourcePath = "lang/" + lang + ".yml";
-
-        InputStream in = getResource(resourcePath);
+        String path = "lang/" + lang + ".yml";
+        InputStream in = getResource(path);
         if (in == null) {
-            // ファイルが見つからない場合は英語にフォールバック
-            getLogger().warning("Language file not found: " + resourcePath + " , fallback to en.yml");
+            getLogger().warning("Language file not found: " + path + " , fallback to en.yml");
             in = getResource("lang/en.yml");
             if (in == null) {
                 getLogger().severe("lang/en.yml is missing! Using minimal defaults.");
@@ -132,13 +133,12 @@ public class PortalBlocker extends JavaPlugin implements Listener, TabCompleter 
                 }
             }
         } catch (Exception e) {
-            getLogger().severe("Failed to load language file: " + resourcePath);
             e.printStackTrace();
         }
     }
 
     /**
-     * メッセージ取得 (String.format対応)
+     * メッセージを取得
      */
     private String msg(String key, Object... args) {
         String text = messages.getOrDefault(key, key);
@@ -148,25 +148,24 @@ public class PortalBlocker extends JavaPlugin implements Listener, TabCompleter 
         return text;
     }
 
-    // ---------------------------------------------
-    // world.yml の読み込み・追記・保存
-    // ---------------------------------------------
+    // --------------------------------------------------
+    // world.yml 関連
+    // --------------------------------------------------
     private void setupWorldConfig() {
         worldConfigFile = new File(getDataFolder(), "world.yml");
         if (!worldConfigFile.exists()) {
-            // 初回導入時のみコメント付きファイルをコピー
+            // 初回のみコメント付きの world.yml をコピー
             saveResource("world.yml", false);
         }
         worldConfig = YamlConfiguration.loadConfiguration(worldConfigFile);
     }
 
     private void saveWorldConfig() {
-        if (worldConfig != null) {
-            try {
-                worldConfig.save(worldConfigFile);
-            } catch (IOException e) {
-                getLogger().severe("Could not save world.yml: " + e.getMessage());
-            }
+        if (worldConfig == null) return;
+        try {
+            worldConfig.save(worldConfigFile);
+        } catch (IOException e) {
+            getLogger().severe("Failed to save world.yml: " + e.getMessage());
         }
     }
 
@@ -175,14 +174,13 @@ public class PortalBlocker extends JavaPlugin implements Listener, TabCompleter 
     }
 
     /**
-     * 未登録のワールドを "AUTO" / "block-distance: default" / "nether-block-distance: default" で追加
+     * 未登録のワールドを "AUTO", "block-distance: default", "nether-block-distance: default" で追記
      */
     private void addMissingWorlds() {
         for (World w : Bukkit.getWorlds()) {
             String basePath = "worlds." + w.getName();
             if (!worldConfig.isConfigurationSection(basePath)) {
                 worldConfig.createSection(basePath);
-                // デフォルト記述
                 worldConfig.set(basePath + ".type", "AUTO");
                 worldConfig.set(basePath + ".block-distance", "default");
                 worldConfig.set(basePath + ".nether-block-distance", "default");
@@ -190,46 +188,80 @@ public class PortalBlocker extends JavaPlugin implements Listener, TabCompleter 
         }
     }
 
-    // ---------------------------------------------
-    // イベント (PortalCreate / PlayerPortal)
-    // エンドワールドは処理しない
-    // ---------------------------------------------
+    // --------------------------------------------------
+    // イベント: PortalCreateEvent
+    // --------------------------------------------------
     @EventHandler
     public void onPortalCreate(PortalCreateEvent event) {
         World world = event.getWorld();
-        // エンドワールドはスキップ
+
+        // エンドワールドは無視
         if (world.getEnvironment() == Environment.THE_END) {
             return;
         }
 
+        // **自動生成 (NETHER_PAIR) の場合はキャンセルしない**
+        // これにより、ネザー側ポータルがないときはサーバーが作成し、プレイヤーが移動できる
+        if (event.getReason() == PortalCreateEvent.CreateReason.NETHER_PAIR) {
+            return;
+        }
+
+        // 手動作成 (FIRE など) の場合のみ、範囲チェックや権限チェックを行う
         int maxDist = getEffectiveDistance(world);
         Location spawnLoc = world.getSpawnLocation();
 
         for (org.bukkit.block.BlockState block : event.getBlocks()) {
             Location portalLoc = block.getLocation();
+
             if (isWithinRestricted(spawnLoc, portalLoc, maxDist)) {
-                event.setCancelled(true);
-                // 周囲のプレイヤーに通知
+                // 制限ゾーン内
+                boolean allowed = false;
                 for (Player p : Bukkit.getOnlinePlayers()) {
-                    if (p.getWorld().equals(world) && isWithinRestricted(p.getLocation(), portalLoc, 10)) {
-                        p.sendMessage(msg("PORTAL_CREATE_DENY"));
-                        p.sendMessage(String.format("§7" + msg("WITHIN_LIMIT"), maxDist, world.getName()));
+                    // 同じワールド＆±5ブロック以内のプレイヤーを作成者候補
+                    if (p.getWorld().equals(world) && isWithinRestricted(p.getLocation(), portalLoc, 5)) {
+                        // 権限を持っていれば許可
+                        if (p.hasPermission("portalblocker.create")) {
+                            allowed = true;
+                            break;
+                        }
                     }
                 }
-                return;
+
+                if (!allowed) {
+                    // 権限がない → キャンセル
+                    event.setCancelled(true);
+
+                    // 周囲プレイヤーに通知
+                    for (Player near : Bukkit.getOnlinePlayers()) {
+                        if (near.getWorld().equals(world) && isWithinRestricted(near.getLocation(), portalLoc, 10)) {
+                            near.sendMessage(msg("PORTAL_CREATE_DENY"));
+                        }
+                    }
+                    return;
+                }
             }
         }
     }
 
+    // --------------------------------------------------
+    // イベント: PlayerPortalEvent
+    // --------------------------------------------------
     @EventHandler
     public void onPlayerPortal(PlayerPortalEvent event) {
         Player player = event.getPlayer();
         World world = player.getWorld();
-        // エンドワールドはスキップ
+
+        // エンドはスキップ
         if (world.getEnvironment() == Environment.THE_END) {
             return;
         }
 
+        // 設定が true なら範囲内移動を許可
+        if (allowPortalTravelInRestricted) {
+            return;
+        }
+
+        // false → 従来通り範囲チェックでブロック
         int maxDist = getEffectiveDistance(world);
         Location spawnLoc = world.getSpawnLocation();
         Location portalLoc = event.getFrom();
@@ -241,56 +273,46 @@ public class PortalBlocker extends JavaPlugin implements Listener, TabCompleter 
         }
     }
 
-    /**
-     * スポーン地点から四角形範囲 (±maxDist) をチェック
-     */
-    private boolean isWithinRestricted(Location spawn, Location check, int maxDist) {
+    // --------------------------------------------------
+    // 距離計算
+    // --------------------------------------------------
+    private boolean isWithinRestricted(Location spawn, Location check, int dist) {
         double dx = Math.abs(spawn.getX() - check.getX());
         double dz = Math.abs(spawn.getZ() - check.getZ());
-        return (dx <= maxDist && dz <= maxDist);
+        return (dx <= dist && dz <= dist);
     }
 
-    /**
-     * ワールドごとの距離を決定 (type, block-distance, nether-block-distance)
-     */
     private int getEffectiveDistance(World w) {
-        String path = "worlds." + w.getName();
-        String type = worldConfig.getString(path + ".type", "AUTO").toUpperCase();
+        String basePath = "worlds." + w.getName();
+        String type = worldConfig.getString(basePath + ".type", "AUTO").toUpperCase();
 
-        // block-distance と nether-block-distance は "default" or 数値
-        String bdistStr = worldConfig.getString(path + ".block-distance", "default");
-        String ndistStr = worldConfig.getString(path + ".nether-block-distance", "default");
+        String bdistStr = worldConfig.getString(basePath + ".block-distance", "default");
+        String ndistStr = worldConfig.getString(basePath + ".nether-block-distance", "default");
 
-        // 実際の値に変換
-        int localBlockDist = parseOrDefault(bdistStr, globalBlockDistance);
-        int localNetherDist = parseOrDefault(ndistStr, globalNetherDistance);
+        int localBlock = parseOrDefault(bdistStr, globalBlockDistance);
+        int localNether = parseOrDefault(ndistStr, globalNetherDistance);
 
         if (type.equals("OVERWORLD")) {
-            return localBlockDist;
+            return localBlock;
         } else if (type.equals("NETHER")) {
-            return localNetherDist;
+            return localNether;
         } else if (type.equals("THE_END")) {
-            // world.yml で THE_END と書かれていても実際にはイベントをスキップ
-            // 一応返す値を決める (ここでは localBlockDist)
-            return localBlockDist;
+            // THE_END はスキップ対象だが一応値を返す
+            return localBlock;
         } else {
-            // AUTO -> Bukkit の Environment に従う
+            // AUTO → 実際の環境を参照
             if (w.getEnvironment() == Environment.NETHER) {
-                return localNetherDist;
+                return localNether;
             } else {
-                return localBlockDist;
+                return localBlock;
             }
         }
     }
 
-    /**
-     * "default" と書かれていれば defaultVal を返し、数値ならパースして返す
-     */
     private int parseOrDefault(String str, int defaultVal) {
         if ("default".equalsIgnoreCase(str)) {
             return defaultVal;
         }
-        // それ以外は数値とみなす
         try {
             return Integer.parseInt(str);
         } catch (NumberFormatException e) {
@@ -298,9 +320,9 @@ public class PortalBlocker extends JavaPlugin implements Listener, TabCompleter 
         }
     }
 
-    // ---------------------------------------------
-    // コマンド実装 (/portalblocker)
-    // ---------------------------------------------
+    // --------------------------------------------------
+    // コマンド処理
+    // --------------------------------------------------
     @Override
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
         if (!cmd.getName().equalsIgnoreCase("portalblocker")) {
@@ -318,15 +340,10 @@ public class PortalBlocker extends JavaPlugin implements Listener, TabCompleter 
                     sender.sendMessage(msg("NO_PERMISSION"));
                     return true;
                 }
-                // config.yml & lang 再読込
                 loadConfigAndLanguage();
-                // world.yml 再読込
                 reloadWorldConfig();
-                // 未登録ワールドを "default" 付きで追加
                 addMissingWorlds();
-                // 保存
                 saveWorldConfig();
-                // メッセージ
                 sender.sendMessage(msg("RELOAD_DONE"));
                 return true;
 
@@ -335,7 +352,6 @@ public class PortalBlocker extends JavaPlugin implements Listener, TabCompleter 
                     sender.sendMessage(msg("NO_PERMISSION"));
                     return true;
                 }
-                // world.yml に未登録ワールドを追加
                 addMissingWorlds();
                 saveWorldConfig();
                 sender.sendMessage("§aAll missing worlds have been added to world.yml");

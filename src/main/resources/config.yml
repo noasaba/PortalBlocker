@@ -1,12 +1,17 @@
 # Global settings for PortalBlocker
-# Select language Japanese(ja) or English(en)
+# Select language: "ja" (Japanese) or "en" (English)
 language: ja
 
-# The distance from the world's spawn point (X, Z only) at which Nether portals cannot be created or used.
-# This value is applied to "normal" or "OVERWORLD" worlds.
+# The distance (X, Z only) from the world's spawn point at which
+# Nether portals cannot be created or used in OVERWORLD (type: OVERWORLD).
 block-distance: 100
 
-# The distance from the world's spawn point (X, Z only) at which Nether portals cannot be created or used in Nether worlds.
-# If set to a number, that value is used.
-# If set to "default", it becomes: (block-distance / 8) + 2
+# The distance (X, Z only) from the world's spawn point at which
+# Nether portals cannot be created or used in NETHER (type: NETHER).
+# - If set to a number, that value is used.
+# - If set to "default", it becomes (block-distance / 8) + 2
 nether-block-distance: default
+
+# If true, players can USE a portal inside the restricted zone.
+# If false, they cannot use the portal in that zone (the plugin will block it).
+allow-portal-travel-in-restricted-zone: true

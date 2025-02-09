@@ -1,13 +1,18 @@
 name: PortalBlocker
-version: '1.4'
+version: 1.4
 main: com.noasaba.portalBlocker.PortalBlocker
 api-version: '1.21'
 commands:
   portalblocker:
-    description: PortalBlocker の管理コマンド
+    description: PortalBlocker management command
     usage: /portalblocker <reload|generateworldconfig>
     permission: portalblocker.admin
 permissions:
   portalblocker.admin:
-    description: PortalBlocker 管理コマンド実行権限
+    description: Manage PortalBlocker commands
+    default: op
+
+  # 新しく追加: ポータル作成が許可される権限
+  portalblocker.create:
+    description: Can create Nether portals inside restricted zones
     default: op
