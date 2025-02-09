@@ -35,7 +35,7 @@ public class PortalBlocker extends JavaPlugin implements Listener, TabCompleter 
     private static final int DEFAULT_NETHER_MULTIPLIER = 8;
     private static final int DEFAULT_NETHER_OFFSET = 2;
 
-    // 「制限ゾーン内でのポータル使用」を許可するか
+    // 範囲内でポータル使用を許可するか
     private boolean allowPortalTravelInRestricted;
 
     // world.yml
@@ -51,7 +51,6 @@ public class PortalBlocker extends JavaPlugin implements Listener, TabCompleter 
 
         // world.yml の用意
         setupWorldConfig();
-        // Bukkitが認識しているワールドのうち、未登録のワールドを追加
         addMissingWorlds();
         saveWorldConfig();
 
@@ -200,26 +199,25 @@ public class PortalBlocker extends JavaPlugin implements Listener, TabCompleter 
             return;
         }
 
-        // **自動生成 (NETHER_PAIR) の場合はキャンセルしない**
-        // これにより、ネザー側ポータルがないときはサーバーが作成し、プレイヤーが移動できる
+        // ネザー側の自動生成 (NETHER_PAIR) はキャンセルしない
         if (event.getReason() == PortalCreateEvent.CreateReason.NETHER_PAIR) {
             return;
         }
 
-        // 手動作成 (FIRE など) の場合のみ、範囲チェックや権限チェックを行う
+        // それ以外 (手動作成など) の場合、距離＆権限チェック
         int maxDist = getEffectiveDistance(world);
         Location spawnLoc = world.getSpawnLocation();
 
         for (org.bukkit.block.BlockState block : event.getBlocks()) {
             Location portalLoc = block.getLocation();
 
+            // スポーン地点から±maxDist 以内か？
             if (isWithinRestricted(spawnLoc, portalLoc, maxDist)) {
-                // 制限ゾーン内
+                // 制限ゾーン
                 boolean allowed = false;
                 for (Player p : Bukkit.getOnlinePlayers()) {
-                    // 同じワールド＆±5ブロック以内のプレイヤーを作成者候補
                     if (p.getWorld().equals(world) && isWithinRestricted(p.getLocation(), portalLoc, 5)) {
-                        // 権限を持っていれば許可
+                        // 5ブロック以内のプレイヤーが portalblocker.create 権限を持っていればOK
                         if (p.hasPermission("portalblocker.create")) {
                             allowed = true;
                             break;
@@ -228,16 +226,26 @@ public class PortalBlocker extends JavaPlugin implements Listener, TabCompleter 
                 }
 
                 if (!allowed) {
-                    // 権限がない → キャンセル
                     event.setCancelled(true);
 
-                    // 周囲プレイヤーに通知
+                    // 周囲プレイヤーに2行メッセージを通知
                     for (Player near : Bukkit.getOnlinePlayers()) {
-                        if (near.getWorld().equals(world) && isWithinRestricted(near.getLocation(), portalLoc, 10)) {
+                        if (near.getWorld().equals(world)
+                                && isWithinRestricted(near.getLocation(), portalLoc, 10)) {
+
+                            // 1) 短いメッセージ
                             near.sendMessage(msg("PORTAL_CREATE_DENY"));
+                            //  (例: "この場所ではネザーポータルを作成できません！")
+
+                            // 2) 詳細メッセージ
+                            near.sendMessage(String.format(
+                                    "§7" + msg("WITHIN_LIMIT"),  // lang/ja.yml → "スポーン地点から %d ブロック以内..."
+                                    maxDist,
+                                    world.getName()
+                            ));
                         }
                     }
-                    return;
+                    return; // 最初に見つかったブロックでキャンセルしたら終了
                 }
             }
         }
@@ -251,25 +259,34 @@ public class PortalBlocker extends JavaPlugin implements Listener, TabCompleter 
         Player player = event.getPlayer();
         World world = player.getWorld();
 
-        // エンドはスキップ
+        // THE_END はスキップ
         if (world.getEnvironment() == Environment.THE_END) {
             return;
         }
 
-        // 設定が true なら範囲内移動を許可
+        // もし allowPortalTravelInRestricted が true なら使用を許可
         if (allowPortalTravelInRestricted) {
             return;
         }
 
-        // false → 従来通り範囲チェックでブロック
+        // false の場合は 距離チェック
         int maxDist = getEffectiveDistance(world);
         Location spawnLoc = world.getSpawnLocation();
         Location portalLoc = event.getFrom();
 
         if (isWithinRestricted(spawnLoc, portalLoc, maxDist)) {
             event.setCancelled(true);
+
+            // 1) 短いメッセージ
             player.sendMessage(msg("PORTAL_USE_DENY"));
-            player.sendMessage(String.format("§7" + msg("WITHIN_LIMIT"), maxDist, world.getName()));
+            //  (例: "このネザーポータルは使用できません！")
+
+            // 2) 詳細メッセージ
+            player.sendMessage(String.format(
+                    "§7" + msg("WITHIN_LIMIT"),  // "スポーン地点から %d ブロック以内 (ワールド: %s) ..."
+                    maxDist,
+                    world.getName()
+            ));
         }
     }
 
@@ -297,7 +314,7 @@ public class PortalBlocker extends JavaPlugin implements Listener, TabCompleter 
         } else if (type.equals("NETHER")) {
             return localNether;
         } else if (type.equals("THE_END")) {
-            // THE_END はスキップ対象だが一応値を返す
+            // THE_END はスキップ対象だが一応返す
             return localBlock;
         } else {
             // AUTO → 実際の環境を参照
