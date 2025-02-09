@@ -1,34 +1,29 @@
-# ===================================================================
+# ========================================================
 #  PortalBlocker - world.yml
-#    - This file controls per-world settings for portal creation/use.
-#    - If a world is not listed here, PortalBlocker will add it
-#      automatically on startup/reload with the "AUTO" type.
+#   - Per-world settings for nether portal restrictions.
+#   - End worlds (THE_END) are automatically ignored (no restriction).
 #
-#  type:
-#    - AUTO       : Use the actual Bukkit environment
-#                   (NORMAL / NETHER / THE_END).
-#    - OVERWORLD  : Force Overworld distance settings (block-distance).
-#    - NETHER     : Force Nether distance settings (nether-block-distance).
-#    - THE_END    : Force End. (If you want separate logic, you must implement it.)
+#   type:
+#     AUTO: Use the actual environment of this world.
+#     OVERWORLD: Force Overworld rules (block-distance).
+#     NETHER: Force Nether rules (nether-block-distance).
+#     THE_END: (Plugin will skip these worlds entirely in events)
 #
-#  block-distance:
-#    - If not specified, the global value (config.yml) is used.
+#   block-distance:
+#     override for Overworld distance
 #
-#  nether-block-distance:
-#    - If not specified, the global value (config.yml) is used.
+#   nether-block-distance:
+#     override for Nether distance
 #
-#  Example usage:
-#    worlds:
-#      world:
-#        type: OVERWORLD
-#        block-distance: 200
-#      world_nether:
-#        type: NETHER
-#        nether-block-distance: 30
-#      my_custom_world:
-#        type: AUTO
-#        # block-distance: 120
-#        # nether-block-distance: 15
-# ===================================================================
-
+#   Example:
+#     worlds:
+#       world:
+#         type: AUTO
+#       world_nether:
+#         type: NETHER
+#         nether-block-distance: 30
+#       skylands:
+#         type: OVERWORLD
+#         block-distance: 200
+# ========================================================
 worlds: {}
