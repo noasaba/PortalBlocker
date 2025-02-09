@@ -3,11 +3,11 @@ version: '1.0-SNAPSHOT'
 main: com.noasaba.portalBlocker.PortalBlocker
 api-version: '1.21'
 commands:
-  portalBlocker:
-    description: PortalBlockerの管理コマンド
-    usage: /portalblocker reload
-    permission: portalblocker.reload
+  portalblocker:
+    description: PortalBlocker の管理コマンド
+    usage: /portalblocker <reload|generateworldconfig>
+    permission: portalblocker.admin
 permissions:
-  portalBlocker.reload:
-    description: PortalBlockerの設定をリロードできる
+  portalblocker.admin:
+    description: PortalBlocker 管理コマンド実行権限
     default: op

@@ -1,2 +1,12 @@
-block-distance: 200
+# Global settings for PortalBlocker
+# Select language Japanese(ja) or English(en)
+language: ja
+
+# The distance from the world's spawn point (X, Z only) at which Nether portals cannot be created or used.
+# This value is applied to "normal" or "OVERWORLD" worlds.
+block-distance: 100
+
+# The distance from the world's spawn point (X, Z only) at which Nether portals cannot be created or used in Nether worlds.
+# If set to a number, that value is used.
+# If set to "default", it becomes: (block-distance / 8) + 2
 nether-block-distance: default

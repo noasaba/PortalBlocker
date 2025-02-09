@@ -1,0 +1,8 @@
+NO_PERMISSION: "このコマンドを実行する権限がありません。"
+RELOAD_DONE: "PortalBlockerの設定をリロードしました！"
+PORTAL_CREATE_DENY: "この場所ではネザーポータルを作成できません！"
+PORTAL_USE_DENY: "このネザーポータルは使用できません！"
+WITHIN_LIMIT: "スポーン地点から %d ブロック以内 (ワールド: %s)"
+HELP_HEADER: "===== PortalBlocker ヘルプ ====="
+HELP_RELOAD: "/portalblocker reload - コンフィグ＆メッセージのリロード"
+HELP_GENERATE: "/portalblocker generateworldconfig - 未登録ワールドを追加"

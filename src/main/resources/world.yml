@@ -1,0 +1,34 @@
+# ===================================================================
+#  PortalBlocker - world.yml
+#    - This file controls per-world settings for portal creation/use.
+#    - If a world is not listed here, PortalBlocker will add it
+#      automatically on startup/reload with the "AUTO" type.
+#
+#  type:
+#    - AUTO       : Use the actual Bukkit environment
+#                   (NORMAL / NETHER / THE_END).
+#    - OVERWORLD  : Force Overworld distance settings (block-distance).
+#    - NETHER     : Force Nether distance settings (nether-block-distance).
+#    - THE_END    : Force End. (If you want separate logic, you must implement it.)
+#
+#  block-distance:
+#    - If not specified, the global value (config.yml) is used.
+#
+#  nether-block-distance:
+#    - If not specified, the global value (config.yml) is used.
+#
+#  Example usage:
+#    worlds:
+#      world:
+#        type: OVERWORLD
+#        block-distance: 200
+#      world_nether:
+#        type: NETHER
+#        nether-block-distance: 30
+#      my_custom_world:
+#        type: AUTO
+#        # block-distance: 120
+#        # nether-block-distance: 15
+# ===================================================================
+
+worlds: {}

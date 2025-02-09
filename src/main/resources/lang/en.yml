@@ -1,0 +1,8 @@
+NO_PERMISSION: "You do not have permission to use this command."
+RELOAD_DONE: "PortalBlocker configuration reloaded!"
+PORTAL_CREATE_DENY: "You cannot create a Nether portal here!"
+PORTAL_USE_DENY: "You cannot use this Nether portal here!"
+WITHIN_LIMIT: "Within %d blocks of spawn in world: %s"
+HELP_HEADER: "===== PortalBlocker Help ====="
+HELP_RELOAD: "/portalblocker reload - Reload config & messages"
+HELP_GENERATE: "/portalblocker generateworldconfig - Add missing worlds"
